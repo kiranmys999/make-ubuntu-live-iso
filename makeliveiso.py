@@ -3,7 +3,8 @@ import subprocess
 import os.path
 import os
 import sys
-import random
+import argparse
+
 
 os.environ["WORK"]=os.path.expanduser("~/work")
 os.environ["CD"]=os.path.expanduser("~/cd")
@@ -14,21 +15,30 @@ os.environ["FS_DIR"]="casper"
 
 
 def __runcmd(cmd):
-    #print cmd
-    
-    #os.system(cmd)
     return call(cmd, executable="/bin/bash", shell=True)
-    #return Popen(cmd, executable="/bin/bash", stdin=PIPE, stdout=PIPE, stderr=PIPE, env=os.environ, shell=True)
 
 
 
-    
+
+def setupenv():
+    cmd1 = "sudo mkdir -p ${CD}/{${FS_DIR},boot/grub} ${WORK}/rootfs"
+    result1 = __runcmd(cmd1)
+
+    cmd2 = "sudo apt-get update"
+    result2 = __runcmd(cmd2)
+
+    cmd3 = "sudo apt-get install grub2 xorriso squashfs-tools"
+    result3 = __runcmd(cmd3)
+
+
+
+
 def copyToNewFS():
     """Copy your installation into the new filesystem """
 
     cmd1 = "sudo rsync -av --one-file-system --exclude=/proc/* --exclude=/dev/* \
 --exclude=/sys/* --exclude=/tmp/* --exclude=/home/* --exclude=/lost+found \
---exclude=/var/tmp/* --exclude=/boot/grub/* --exclude=/root/* \
+--exclude=/var/tmp/* --exclude=/var/cache/apt/* --exclude=/boot/grub/* --exclude=/root/* \
 --exclude=/var/mail/* --exclude=/var/spool/* --exclude=/media/* \
 --exclude=/etc/fstab --exclude=/etc/mtab --exclude=/etc/hosts \
 --exclude=/etc/timezone --exclude=/etc/shadow* --exclude=/etc/gshadow* \
@@ -60,7 +70,7 @@ def copyToNewFS():
     cmd4 = "cd ${WORK}/rootfs/etc/skel && sudo mkdir Documents Downloads Music Picutres Public Videos"
     result4 = __runcmd(cmd4)
 
-    cmd5 = "cd ~"
+    cmd5 = "cd " + os.path.expanduser('~')
     result5 = __runcmd(cmd5)    
 
 
@@ -243,26 +253,82 @@ def buildCD():
 
 def cleanup():
     """Clean our workspace"""
-    cmd = """[ -d "$WORK" ] && rm -r $WORK $CD"""
+    cmd = """[ -d "$WORK" ] && sudo rm -rv $WORK $CD"""
     result = __runcmd(cmd)
+
+
+
+    
+def start():
+    parser = argparse.ArgumentParser(description="Normal order of execution: prepare -> mksquash -> mkgrub -> mklive -> cleanup")
+    subparsers = parser.add_subparsers(dest='liveiso')
+    parser_prepare = subparsers.add_parser('prepare', help="Only prepare the build environment")
+    parser_mksquash = subparsers.add_parser( 'mksquash', help="Only create compressed squashfs of the filesystem")
+    parser_mkgrub = subparsers.add_parser('mkgrub', help="Create grub bootloader config")    
+    parser_mklive = subparsers.add_parser('mklive', help="Only create Live CD/DVD ISO image of the filesystem, \
+                                                        from an existing build environment already prepared in a previous step")
+    parser_cleanup = subparsers.add_parser('cleanup', help="Only clean up the build directories")
+    parser_all = subparsers.add_parser('all', help="Build and create the ISO image and clean up in one continuous process")
+    parser_help = subparsers.add_parser('help', help="Print the help message")
+
+    args = parser.parse_args()
+
+    if args.liveiso == "prepare":
+        print "preparing the build and chroot environment..."
+        setupenv()
+        copyToNewFS()
+        chrootToNewFS()
+        prepareCDDir()    
+
+    elif args.liveiso == "mksquash":
+        print "creating squashfs..."
+        createSquashfs()
+    
+    elif args.liveiso == "mkgrub":
+        print "creating grub bootloader config..."
+        createGrubCfg()
+
+    elif args.liveiso == "mklive":
+        print "creating Live ISO image..."
+        buildCD()
+
+    elif args.liveiso == "cleanup":
+        print "cleaning up the build environment..."
+        cleanup()
+
+    elif args.liveiso == "all":
+        print "preparing the build and chroot environment..."
+        setupenv()
+        copyToNewFS()
+        chrootToNewFS()
+        prepareCDDir()
+        print "creating squashfs..."
+        createSquashfs()
+        print "creating grub bootloader config..."
+        createGrubCfg()
+        print "creating Live ISO image..."
+        buildCD()
+        print "cleaning up the build environment..."
+        cleanup()
+        print "DONE!"
+
+    elif args.liveiso == "help":
+        parser.print_help()
 
 
 
 def test():
-    cmd = """[ -d "/home/kiran/livecdproj/test" ] && rm -r /home/kiran/livecdproj/test /home/kiran/livecdproj/cdtest"""
-    print cmd
-    result = __runcmd(cmd)
+    cmd5 = "cd " + os.path.expanduser('~')
+    print cmd5
+    result5 = __runcmd(cmd5) 
+
+
     
-    
-    
-    
+
+            
 if __name__=="__main__":
-    test()
-    '''
-    copyToNewFS()
-    chrootToNewFS()
-    prepareCDDir()
-    createSquashfs()
-    createGrubCfg()
-    buildCD()
-    '''
+    #test()
+    start()
+
+    
+ 
